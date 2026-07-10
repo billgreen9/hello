@@ -71,14 +71,15 @@ public class SecKillSimulation {
         Map<String,Long> tmp = new ConcurrentHashMap<>();
         Map<String,Long> olders = orders;
         orders = tmp;
+        int size = olders.size();
         try {
-            Thread.sleep(50);
+            Thread.sleep(5);
         }catch (InterruptedException e){
             new RuntimeException(e);
         }
 
         logs(olders.keySet().stream().map(order->order).collect(Collectors.toList()));
-        return olders.size();
+        return size;
 
        }
 
