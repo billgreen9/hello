@@ -3,9 +3,7 @@ package com.hello.test;
 import org.apache.commons.io.FileUtils;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.Charset;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -13,6 +11,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+@Deprecated
 public class SecKillSimulation {
 
     private volatile Map<String,Long> orders = new ConcurrentHashMap<>();
@@ -41,11 +40,13 @@ public class SecKillSimulation {
     }
 
     public void createOrder(){
+        long s1 = System.currentTimeMillis();
         checkCondition();
         int x  = id.addAndGet(1);
         String key = "order-"+String.format("%03d",x);
         orders.put(key,System.currentTimeMillis());
 
+        int size = 0;
         if(orders.size() >= batchSize){
             synchronized (this){
                 if(orders.size() >= batchSize){
@@ -59,32 +60,37 @@ public class SecKillSimulation {
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
-                save();
+                size = saveDB();
             }
         }
+        long s2 = System.currentTimeMillis();
+        System.out.println("createOrder cost time="+(s2-s1)+",size="+size);
     }
 
-    public void save(){
+    public int saveDB(){
         Map<String,Long> tmp = new ConcurrentHashMap<>();
         Map<String,Long> olders = orders;
         orders = tmp;
         try {
-            Thread.sleep(new Random().nextInt(1000));
+            Thread.sleep(50);
         }catch (InterruptedException e){
             new RuntimeException(e);
         }
 
         logs(olders.keySet().stream().map(order->order).collect(Collectors.toList()));
+        return olders.size();
 
        }
 
-    private void logs(List<String> lines) {
+    private int logs(List<String> lines) {
         try {
+           // System.out.println("logs size="+lines.size());
             String logFile = path + "/run.log";
             FileUtils.writeLines(new File(logFile), lines, true);
         }catch (Exception e){
             throw new RuntimeException(e);
         }
+        return lines.size();
     }
 
     private void log(String order) {
@@ -99,12 +105,14 @@ public class SecKillSimulation {
     public static void main(String[] args) {
         SecKillSimulation simulation = new SecKillSimulation();
         Runnable runnable = () -> {
-            simulation.createOrder();
+            for(int i=0;i<50;i++) {
+                simulation.createOrder();
+            }
         };
 
 
        // ExecutorService pool = Executors.newCachedThreadPool();
-        for(int i=0;i<300;i++){
+        for(int i=0;i<20;i++){
             new Thread(runnable).start();
         }
     }
