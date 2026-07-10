@@ -6,13 +6,12 @@ import java.io.File;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Deprecated
-public class SecKillSimulation {
+public class SecKillSimulationV1 {
 
     private volatile Map<String,Order> orders = new ConcurrentHashMap<>();
 
@@ -49,7 +48,7 @@ public class SecKillSimulation {
     private AtomicInteger id = new AtomicInteger();
     private String path = null;
 
-    public SecKillSimulation() {
+    public SecKillSimulationV1() {
         try {
             path = getClass().getResource("/").toURI().getPath();
             String logFile = path + "/run.log";
@@ -151,7 +150,7 @@ public class SecKillSimulation {
     }
 
     public static void main(String[] args) {
-        SecKillSimulation simulation = new SecKillSimulation();
+        SecKillSimulationV1 simulation = new SecKillSimulationV1();
         Runnable runnable = () -> {
             for(int i=0;i<50;i++) {
                 simulation.createOrder();
