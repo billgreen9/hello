@@ -14,11 +14,37 @@ import java.util.stream.Collectors;
 @Deprecated
 public class SecKillSimulation {
 
-    private volatile Map<String,Long> orders = new ConcurrentHashMap<>();
+    private volatile Map<String,Order> orders = new ConcurrentHashMap<>();
 
-    private ExecutorService saveDBExecutor = Executors.newFixedThreadPool(10);
+    private static int wait_time = 100;
 
-    private int batchSize = 20;
+    private Runnable consumer = () -> {
+        int internal = wait_time;
+        long lastTime = System.currentTimeMillis();
+        while (true){
+            long now = System.currentTimeMillis();
+            if(orders.size() > batchSize || now - lastTime >= internal){
+                lastTime = now;
+                Map<String,Order> olders = orders;
+                orders = new ConcurrentHashMap<>();
+                CompletableFuture.runAsync(() -> {
+                    if(olders.size() == 0){
+                        return ;
+                    }
+                    saveDB(olders);
+                });
+            }else{
+                try {
+                    Thread.sleep(internal);
+                }catch (Exception e){
+                }
+            }
+
+        }
+    };
+
+    private static int batchSize = 20;
+
 
     private AtomicInteger id = new AtomicInteger();
     private String path = null;
@@ -29,9 +55,24 @@ public class SecKillSimulation {
             String logFile = path + "/run.log";
             System.out.println("path="+path);
             FileUtils.write(new File(logFile),"");
+            Thread t = new Thread(consumer);
+            t.setName("consumerScanner");
+            t.start();
         }catch (Exception e){
             throw new RuntimeException(e);
         }
+    }
+
+    public static class Order{
+        private String id;
+        private long createTime;
+        private volatile boolean ready = false;
+
+        public Order(String id){
+            this.id = id;
+            this.createTime = System.currentTimeMillis();
+        }
+
     }
 
 
@@ -44,40 +85,46 @@ public class SecKillSimulation {
         checkCondition();
         int x  = id.addAndGet(1);
         String key = "order-"+String.format("%03d",x);
-        orders.put(key,System.currentTimeMillis());
+        Order order = new Order(key);
+        orders.put(key,order);
 
-        int size = 0;
-        if(orders.size() >= batchSize){
-            synchronized (this){
-                if(orders.size() >= batchSize){
-                    this.notifyAll();
-                }
-            }
-        }else{
-            synchronized (this){
+        synchronized (order){
+            while (!order.ready){
                 try {
-                    this.wait(100L);
+                    order.wait(wait_time*2);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    break;
                 }
-                size = saveDB();
             }
+           save(order);
         }
+
         long s2 = System.currentTimeMillis();
-        System.out.println("createOrder cost time="+(s2-s1)+",size="+size);
+        System.out.println("id="+x+" createOrder cost time="+(s2-s1));
     }
 
-    public int saveDB(){
-        Map<String,Long> tmp = new ConcurrentHashMap<>();
-        Map<String,Long> olders = orders;
-        orders = tmp;
+    private void save(Order tmp){
+        if(tmp.ready){
+            return ;
+        }
+        tmp.ready = true;
+        synchronized (tmp){
+            tmp.notifyAll();
+        }
+    }
+
+    public int saveDB(Map<String,Order> olders){
         int size = olders.size();
+        System.out.println("size="+size);
         try {
             Thread.sleep(5);
         }catch (InterruptedException e){
             new RuntimeException(e);
         }
-
+        for(String order:olders.keySet()){
+          save(olders.get(order));
+        }
         logs(olders.keySet().stream().map(order->order).collect(Collectors.toList()));
         return size;
 
